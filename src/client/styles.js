@@ -512,7 +512,7 @@ export const CSS = `
   .pc-rail{flex:0 0 auto;flex-direction:row;gap:6px;padding:8px 10px;border-right:0;border-bottom:1px solid var(--pc-line);overflow-x:auto;overflow-y:hidden}
   .pc-rail-group{flex-direction:row;gap:6px;align-items:center}
   .pc-rail-label,.pc-rail-foot{display:none}
-  .pc-rail-item{width:auto;height:28px;padding:0 10px;border:1px solid var(--pc-line-2);border-radius:999px}
+  .pc-rail-item{flex:0 0 auto;width:auto;height:28px;padding:0 10px;border:1px solid var(--pc-line-2);border-radius:999px}
   .pc-rail-item[aria-current=true]{border-color:transparent}
   .pc-rail-item[aria-current=true]::before{display:none}
   .pc-search{flex-basis:150px}
