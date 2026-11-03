@@ -1,0 +1,9 @@
+name: Detect Duplicate Issues
+on:
+  issues:
+    types: [opened]
+jobs:
+  dedup:
+    uses: laiyinyizao007/my-project-management/.github/workflows/reusable-dedup.yml@main
+    permissions:
+      issues: write
