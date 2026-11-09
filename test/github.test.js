@@ -151,3 +151,58 @@ test('进展记录读回：评论里的标记还原 id 与类型', async () => {
   assert.equal(projects[0].updates[0].kind, 'progress')
   assert.equal(projects[0].updates[0].text, '联调通过')
 })
+
+test('看板条目超过 100 个时要分页拉全，不能只读第一页', async () => {
+  // 真实规模：项目组 ~95 个 + 任务 ~70 个 = 170+ 条目。
+  // 只取 items(first:100) 的话，后面的项目组在面板里就凭空消失了。
+  const total = 150
+  const groups = Array.from({ length: total }, (_, i) => ({
+    id: i + 1,
+    node_id: `I_G${i}`,
+    number: i + 1,
+    title: `组 ${i}`,
+    repository_url: `https://api.github.com/repos/laiyinyizao007/repo-${i}`,
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+    labels: [{ name: 'type: group' }, { name: `group:g${i}` }],
+    body: `第 ${i} 组\n\n- 分类：效率工具\n- 主仓：repo-${i}\n- 组内仓：repo-${i}\n- 技术栈：Python\n`,
+  }))
+  const items = groups.map((g, i) => ({
+    id: `ITEM${i}`,
+    content: { __typename: 'Issue', id: g.node_id, title: g.title, number: g.number },
+    fieldValues: { nodes: [
+      { name: '效率工具', field: { name: '分类' } },
+      { name: '进行中', field: { name: '推进状态' } },
+    ] },
+  }))
+
+  const fetchImpl = async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : {}
+    const json = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) })
+    if (url.includes('/search/issues')) {
+      const page = Number(new URL(url).searchParams.get('page') ?? '1')
+      const slice = page === 1 ? groups.slice(0, 100) : groups.slice(100)
+      return json({ items: slice })
+    }
+    if (url.includes('/graphql')) {
+      const after = body.variables?.after ?? null
+      const start = after ? Number(after.replace('cursor-', '')) : 0
+      const next = start + 100
+      return json({ data: { repositoryOwner: { projectV2: {
+        id: 'P1',
+        fields: { nodes: [] },
+        items: {
+          nodes: items.slice(start, start + 100),
+          pageInfo: { hasNextPage: next < total, endCursor: `cursor-${next}` },
+        },
+      } } } })
+    }
+    return json([])
+  }
+
+  const { projects } = await fetchGitHubPortfolio({
+    fetchImpl, token: 't', owner: 'laiyinyizao007', projectNumber: 1,
+  })
+  assert.equal(projects.length, total, '两页都要读到')
+  assert.equal(projects.at(-1).name, '组 149')
+})

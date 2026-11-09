@@ -56,21 +56,28 @@ async function gh(fetchImpl, url, { token, method = 'GET', body } = {}) {
 /** 找出账号下所有项目组 Issue（带 type: group 标签）。 */
 async function fetchGroupIssues(fetchImpl, { token, owner }) {
   const q = `user:${owner} label:"${GROUP_LABEL}" type:issue`
-  const url = `${API}/search/issues?q=${encodeURIComponent(q)}&per_page=100`
-  const data = await gh(fetchImpl, url, { token })
-  return data.items ?? []
+  // 项目组会有一百多个，search 的 per_page=100 不够 —— 翻页拉全
+  const out = []
+  for (let page = 1; page <= 10; page += 1) {
+    const url = `${API}/search/issues?q=${encodeURIComponent(q)}&per_page=100&page=${page}`
+    const data = await gh(fetchImpl, url, { token })
+    const items = data.items ?? []
+    out.push(...items)
+    if (items.length < 100) break
+  }
+  return out
 }
 
 /** 取 Project v2 的字段定义与每个条目的字段值。 */
 async function fetchProjectItems(fetchImpl, { token, owner, projectNumber }) {
   const query = `
-query($login: String!, $num: Int!) {
+query($login: String!, $num: Int!, $after: String) {
   repositoryOwner(login: $login) {
     ... on User { projectV2(number: $num) { id fields(first: 50) { nodes {
       __typename
       ... on ProjectV2Field { id name }
       ... on ProjectV2SingleSelectField { id name options { id name } }
-    } } items(first: 100) { nodes {
+    } } items(first: 100, after: $after) { nodes {
       id
       content { __typename ... on Issue { id title number } }
       fieldValues(first: 20) { nodes {
@@ -79,44 +86,57 @@ query($login: String!, $num: Int!) {
         ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
         ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
       } }
-    } } } }
+    } pageInfo { hasNextPage endCursor } } } }
   }
 }`
-  const res = await fetchImpl(GRAPHQL, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: 'application/vnd.github+json',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables: { login: owner, num: projectNumber } }),
-  })
-  const data = await res.json()
-  if (data.errors?.length) {
-    throw new Error(`GitHub GraphQL error: ${data.errors.map((e) => e.message).join('; ')}`)
-  }
-  const project = data.data?.repositoryOwner?.projectV2
-  if (!project) throw new Error(`找不到 Project #${projectNumber}（owner=${owner}）`)
-
+  // 条目会超过 100 个（项目组 + 任务两百多），必须分页拉全，
+  // 否则后面那些条目在面板里就凭空消失了。
   const fields = {}
-  for (const f of project.fields.nodes) {
-    if (!f?.name) continue
-    // 选项归一化成 { 选项名: 选项 id }，写回时按名字查 id
-    const options = {}
-    for (const o of f.options ?? []) options[o.name] = o.id
-    fields[f.name] = { id: f.id, options }
-  }
   const byIssue = {}
-  for (const node of project.items.nodes) {
-    const content = node.content
-    if (content?.__typename !== 'Issue' || !content.id) continue
-    const values = {}
-    for (const fv of node.fieldValues?.nodes ?? []) {
-      const name = fv.field?.name
-      if (!name) continue
-      values[name] = fv.name ?? fv.text ?? fv.number ?? fv.date ?? ''
+  let after = null
+  let fieldsLoaded = false
+  while (true) {
+    const res = await fetchImpl(GRAPHQL, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/vnd.github+json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ query, variables: { login: owner, num: projectNumber, after } }),
+    })
+    const data = await res.json()
+    if (data.errors?.length) {
+      throw new Error(`GitHub GraphQL error: ${data.errors.map((e) => e.message).join('; ')}`)
     }
-    byIssue[content.id] = { title: content.title, number: content.number, values, itemId: node.id }
+    // 每页都用**本次响应**里的 project —— 复用第一页的对象会让 pageInfo
+    // 一直停在「还有下一页」，游标越走越远却永远读不到新数据。
+    const proj = data.data?.repositoryOwner?.projectV2
+    if (!proj) throw new Error(`找不到 Project #${projectNumber}（owner=${owner}）`)
+
+    if (!fieldsLoaded) {
+      for (const f of proj.fields.nodes) {
+        if (!f?.name) continue
+        // 选项归一化成 { 选项名: 选项 id }，写回时按名字查 id
+        const options = {}
+        for (const o of f.options ?? []) options[o.name] = o.id
+        fields[f.name] = { id: f.id, options }
+      }
+      fieldsLoaded = true
+    }
+    for (const node of proj.items.nodes) {
+      const content = node.content
+      if (content?.__typename !== 'Issue' || !content.id) continue
+      const values = {}
+      for (const fv of node.fieldValues?.nodes ?? []) {
+        const name = fv.field?.name
+        if (!name) continue
+        values[name] = fv.name ?? fv.text ?? fv.number ?? fv.date ?? ''
+      }
+      byIssue[content.id] = { title: content.title, number: content.number, values, itemId: node.id }
+    }
+    if (!proj.items.pageInfo?.hasNextPage) break
+    after = proj.items.pageInfo.endCursor
   }
   return { fields, byIssue }
 }

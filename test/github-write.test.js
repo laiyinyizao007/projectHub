@@ -16,7 +16,7 @@ function recorder({ groupIssues = [], boardItems = [], issues = [], comments = {
       if (query.includes('projectV2(number: $num) { id }') || query.includes('projectV2(number:$num){id}')) {
         return json({ data: { repositoryOwner: { projectV2: { id: 'P1' } } } })
       }
-      if (query.includes('items(first: 100)')) {
+      if (query.includes('items(first: 100')) {
         return json({ data: { repositoryOwner: { projectV2: {
           id: 'P1',
           fields: { nodes: [
