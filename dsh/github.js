@@ -53,6 +53,25 @@ async function gh(fetchImpl, url, { token, method = 'GET', body } = {}) {
   return res.json()
 }
 
+/**
+ * 并发跑一批任务，最多 limit 个同时在飞。
+ * 结果顺序和输入一致 —— 看板的分组顺序不能因为并发而乱掉。
+ */
+async function mapWithLimit(items, limit, worker) {
+  const out = new Array(items.length)
+  let cursor = 0
+  const runners = Array.from({ length: Math.min(Math.max(1, limit), items.length) }, async () => {
+    for (;;) {
+      const i = cursor
+      cursor += 1
+      if (i >= items.length) return
+      out[i] = await worker(items[i], i)
+    }
+  })
+  await Promise.all(runners)
+  return out
+}
+
 /** 找出账号下所有项目组 Issue（带 type: group 标签）。 */
 async function fetchGroupIssues(fetchImpl, { token, owner }) {
   const q = `user:${owner} label:"${GROUP_LABEL}" type:issue`
@@ -216,24 +235,30 @@ export async function fetchGitHubPortfolio({
   const groups = await fetchGroupIssues(fetchImpl, { token, owner })
   const { fields, byIssue } = await fetchProjectItems(fetchImpl, { token, owner, projectNumber })
 
+  // 每个项目组要拉两样东西：子任务（sub-issue）和进展记录（评论）。
+  // 串行的话 95 个组 = 190 次往返，面板要等一分半钟。
+  // 并发拉，并发上限 8 —— 再高会撞 GitHub 的次级限流。
+  const perGroup = await mapWithLimit(groups, 8, async (issue) => {
+    const repoName = String(issue.repository_url ?? '').split('/').pop()
+    const [children, progress] = await Promise.all([
+      fetchSubIssues(fetchImpl, { token, owner, repo: repoName, number: issue.number })
+        .catch(() => []),
+      fetchProgressMarkers(fetchImpl, { token, owner, repo: repoName, number: issue.number })
+        .catch(() => ({ markers: new Set(), records: [] })),
+    ])
+    return { issue, repoName, children, progress }
+  })
+
   const projects = []
-  for (const issue of groups) {
+  for (const { issue, repoName, children, progress } of perGroup) {
     const labels = (issue.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name))
     const key = labels.find((l) => l.startsWith(GROUP_KEY_PREFIX))?.slice(GROUP_KEY_PREFIX.length)
     if (!key) continue
 
-    const repoName = String(issue.repository_url ?? '').split('/').pop()
     const meta = parseBody(issue.body)
     const board = byIssue[issue.node_id] ?? { values: {} }
     const v = board.values ?? {}
 
-    // 子任务：项目组 Issue 的原生 sub-issue（可能分布在组内多个仓）
-    let children = []
-    try {
-      children = await fetchSubIssues(fetchImpl, { token, owner, repo: repoName, number: issue.number })
-    } catch {
-      children = []
-    }
     // 子任务可能分布在组内的**其他仓**（组是跨仓的）——
     // id 必须用子任务自己所在的仓，否则 github-weekly-progress#1 会被编成
     // task:my-project-management#1，和真正的同号 issue 撞在一起，
@@ -253,14 +278,6 @@ export async function fetchGitHubPortfolio({
         done: c.state === 'closed',
         doneAt: c.closed_at ? String(c.closed_at).slice(0, 10) : '',
       })
-    }
-
-    // 进展记录：项目组 Issue 的评论
-    let progress = { markers: new Set(), records: [] }
-    try {
-      progress = await fetchProgressMarkers(fetchImpl, { token, owner, repo: repoName, number: issue.number })
-    } catch {
-      progress = { markers: new Set(), records: [] }
     }
 
     projects.push({
