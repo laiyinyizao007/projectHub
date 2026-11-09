@@ -524,6 +524,30 @@ export const CSS = `
   .pc-tl-head,.pc-tl-row{grid-template-columns:120px 1fr}
   .pc-tl-todayline{left:calc(120px + (100% - 120px) * .5)}
 }
+/* ---------------------------------------------------------------- 看板 */
+.pc-dash{display:flex;flex-direction:column;gap:12px;height:100%}
+.pc-dash-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pc-switch{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--pc-text-2);cursor:pointer}
+.pc-dash-lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:start}
+.pc-lane{border:1px solid var(--pc-line-2);border-radius:var(--pc-r-md);background:var(--pc-panel);min-height:120px;transition:border-color .15s,background .15s}
+.pc-lane-over{border-color:var(--pc-accent);background:var(--pc-hover)}
+.pc-lane-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--pc-line)}
+.pc-lane-body{padding:8px;display:flex;flex-direction:column;gap:10px}
+.pc-lane-empty{padding:14px 6px;text-align:center}
+.pc-lane-grouphead{display:flex;align-items:center;gap:7px;width:100%;padding:5px 6px;border:0;border-radius:var(--pc-r-sm);background:transparent;color:var(--pc-text-2);font-size:11.5px;font-weight:600;cursor:pointer;text-align:left}
+.pc-lane-grouphead:hover{background:var(--pc-hover)}
+.pc-lane-grouphead .pc-pill{margin-left:auto}
+.pc-caret{color:var(--pc-text-3);font-size:10px}
+.pc-lane-cards{display:flex;flex-direction:column;gap:7px;margin-top:4px}
+.pc-dash-card{position:relative;display:flex;flex-direction:column;gap:6px;padding:9px 11px 9px 14px;border:1px solid var(--pc-line-2);border-radius:var(--pc-r-sm);background:var(--pc-panel-2,var(--pc-panel));cursor:grab;overflow:hidden}
+.pc-dash-card:hover{border-color:var(--pc-line);background:var(--pc-hover)}
+.pc-dash-card:active{cursor:grabbing}
+.pc-dash-card:focus-visible{outline:2px solid var(--pc-accent);outline-offset:1px}
+.pc-dash-card .pc-card-accent{position:absolute;left:0;top:0;bottom:0;width:3px}
+.pc-dash-card-top{display:flex;align-items:center;gap:8px}
+.pc-dash-card-name{flex:1;font-size:12.5px;font-weight:600;line-height:1.35;word-break:break-word}
+.pc-dash-card-foot{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:10.5px;color:var(--pc-text-3)}
+
 /* ---------------------------------------------------------------- 台账 */
 .pc-ledger{display:flex;flex-direction:column;gap:12px}
 .pc-ledger-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}

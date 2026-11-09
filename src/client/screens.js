@@ -191,6 +191,143 @@ export function LedgerScreen({ ledger, accents }) {
           h('td', { className: 'pc-ledger-note', title: repo.notes || '' }, repo.notes || '—')))))))
 }
 
+/* ---------------------------------------------------------------- 看板 */
+
+/**
+ * 真正能用的看板：泳道 = 推进状态，泳道内按分类分组。
+ *
+ * 为什么不是「一个状态一列就完事」：
+ *   项目一多（全量同步后 95 个），全堆在同一列就是一条长列表 ——
+ *   那不是看板，是列表。列内再按分类分组，95 个才 navigable。
+ *
+ * 拖拽卡片到别的泳道 = 改推进状态 → 写回 GitHub 的同名字段。
+ */
+const DASH_STATUSES = ['进行中', '休眠', '归档候选']
+
+export function DashboardScreen({ projects, today, accents, onOpen, onMove }) {
+  const [onlyWithTasks, setOnlyWithTasks] = useState(false)
+  const [collapsed, setCollapsed] = useState({})
+  const [dragId, setDragId] = useState(null)
+  const [overStatus, setOverStatus] = useState('')
+
+  const visible = useMemo(
+    () => (onlyWithTasks ? projects.filter((p) => (p.todos?.length ?? 0) > 0) : projects),
+    [projects, onlyWithTasks]
+  )
+
+  const lanes = useMemo(() => {
+    const map = new Map(DASH_STATUSES.map((status) => [status, []]))
+    for (const project of visible) {
+      const status = DASH_STATUSES.includes(project.status) ? project.status : '进行中'
+      if (!map.has(status)) map.set(status, [])
+      map.get(status).push(project)
+    }
+    // 组内再按分类分块
+    return [...map.entries()].map(([status, items]) => {
+      const groups = new Map()
+      for (const project of items) {
+        const key = project.module || '其他项目'
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(project)
+      }
+      return {
+        status,
+        total: items.length,
+        groups: [...groups.entries()].map(([module, list]) => ({
+          module,
+          items: list.sort((a, b) => (b.todos?.length ?? 0) - (a.todos?.length ?? 0)
+            || String(a.name).localeCompare(String(b.name))),
+        })),
+      }
+    })
+  }, [visible])
+
+  const totalTasks = visible.reduce((n, p) => n + (p.todos?.length ?? 0), 0)
+
+  return h('div', { className: 'pc-dash' },
+    h('div', { className: 'pc-dash-bar' },
+      h('label', { className: 'pc-switch' },
+        h('input', {
+          type: 'checkbox', checked: onlyWithTasks,
+          onChange: (event) => setOnlyWithTasks(event.target.checked)
+        }),
+        h('span', null, '只看有任务的')),
+      h('span', { className: 'pc-muted' },
+        `${visible.length} 个项目 · ${totalTasks} 个任务 · 拖卡片换泳道 = 改推进状态（写回 GitHub）`)),
+
+    h('div', { className: 'pc-dash-lanes' },
+      lanes.map((lane) => h('section', {
+        key: lane.status,
+        className: `pc-lane${overStatus === lane.status ? ' pc-lane-over' : ''}`,
+        onDragOver: (event) => { event.preventDefault(); setOverStatus(lane.status) },
+        onDragLeave: () => setOverStatus((s) => (s === lane.status ? '' : s)),
+        onDrop: (event) => {
+          event.preventDefault()
+          setOverStatus('')
+          const id = event.dataTransfer.getData('text/plain') || dragId
+          if (id) onMove(id, lane.status)
+          setDragId(null)
+        },
+      },
+      h('header', { className: 'pc-lane-head' },
+        h('span', { className: `pc-dot pc-c-${lane.status === '进行中' ? 'ok' : lane.status === '休眠' ? 'muted' : 'warn'}` }),
+        h('b', null, lane.status),
+        h('span', { className: 'pc-pill' }, String(lane.total))),
+
+      h('div', { className: 'pc-lane-body' },
+        lane.groups.length === 0
+          ? h('p', { className: 'pc-muted pc-lane-empty' }, '拖卡片到这里')
+          : lane.groups.map((group) => {
+            const key = `${lane.status}:${group.module}`
+            const isCollapsed = collapsed[key]
+            return h('div', { key, className: 'pc-lane-group' },
+              h('button', {
+                type: 'button', className: 'pc-lane-grouphead',
+                'aria-expanded': !isCollapsed,
+                onClick: () => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
+              },
+              h('i', { className: `pc-accent-dot pc-accent-${accentOf(accents, group.module)}` }),
+              h('span', null, group.module),
+              h('span', { className: 'pc-pill' }, String(group.items.length)),
+              h('span', { className: 'pc-caret', 'aria-hidden': 'true' }, isCollapsed ? '▸' : '▾')),
+              isCollapsed ? null : h('div', { className: 'pc-lane-cards' },
+                group.items.map((project) => h(DashCard, {
+                  key: project.id, project, today, accents,
+                  onOpen: () => onOpen(project.id),
+                  onDragStart: (event) => {
+                    setDragId(project.id)
+                    event.dataTransfer.setData('text/plain', project.id)
+                    event.dataTransfer.effectAllowed = 'move'
+                  },
+                  onDragEnd: () => { setDragId(null); setOverStatus('') },
+                }))))
+          }))))))
+}
+
+function DashCard({ project, today, accents, onOpen, onDragStart, onDragEnd }) {
+  const accent = accentOf(accents, project.module || '其他项目')
+  const tasks = project.todos?.length ?? 0
+  const open = (project.todos ?? []).filter((t) => t.done !== true).length
+  return h('article', {
+    className: `pc-dash-card pc-accent-${accent}`,
+    draggable: true,
+    onDragStart,
+    onDragEnd,
+    tabIndex: 0,
+    onClick: onOpen,
+    onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } },
+  },
+  h('span', { className: 'pc-card-accent', 'aria-hidden': 'true' }),
+  h('div', { className: 'pc-dash-card-top' },
+    h('span', { className: 'pc-dash-card-name' }, project.name),
+    tasks > 0 ? h('span', { className: 'pc-pill' }, `${open}/${tasks}`) : null),
+  h(Progress, { value: clampProgress(project), tone: '' }),
+  h('div', { className: 'pc-dash-card-foot' },
+    h('span', null, project.owner || '未指定'),
+    project.dueDate ? h('span', null, formatRemaining(project.dueDate, today)) : null,
+    h('span', { className: 'pc-mono' }, (project.repos?.[0] ?? ''))))
+}
+
 /* ------------------------------------------------------------------ 看板 */
 
 export function KanbanScreen({ columns, accents, onOpen }) {

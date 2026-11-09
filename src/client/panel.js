@@ -12,7 +12,7 @@ import React from 'react'
 import { ApiError, askAi, newId, readLedger, readState, writeState } from './api.js'
 import { CSS, STYLE_ID } from './styles.js'
 import { Badge, Btn, Empty, Field, Icon, IconBtn, Modal, Notice, Progress, RiskBadge, SearchBox, Sheet, Toast, useToast } from './ui.js'
-import { BoardScreen, CalendarScreen, FollowUpsScreen, KanbanScreen, LedgerScreen, ListScreen, OverviewScreen, TimelineScreen } from './screens.js'
+import { BoardScreen, CalendarScreen, DashboardScreen, FollowUpsScreen, KanbanScreen, LedgerScreen, ListScreen, OverviewScreen, TimelineScreen } from './screens.js'
 import { MODULES, STATUSES, clampProgress, daysLeft, formatRemaining, moduleNames, openTodos, projectRisk, sortByRisk, todayISO } from '../shared/analysis.js'
 import { QUESTION_EXAMPLES, answerQuestion } from '../shared/query.js'
 import { buildAnalysisPrompt, buildDocDraft, docKinds, deliveryHint } from '../shared/prompt.js'
@@ -38,7 +38,7 @@ const AI_EXAMPLES = [
 const TABS = [
   { id: 'overview', label: '概览', icon: 'target' },
   { id: 'board', label: '模块看板', icon: 'grid' },
-  { id: 'kanban', label: '状态看板', icon: 'inbox' },
+  { id: 'kanban', label: '看板', icon: 'inbox' },
   { id: 'list', label: '列表', icon: 'list' },
   { id: 'calendar', label: '日历', icon: 'calendar' },
   { id: 'timeline', label: '时间线', icon: 'clock' },
@@ -654,6 +654,19 @@ export function ConsoleView({ portfolio }) {
     projects: current.projects.map((item) => (item.id === project.id ? project : item))
   })), [update])
 
+  // 拖拽换泳道 = 改推进状态。推进状态在写回白名单里，改完就落到 GitHub。
+  const moveProject = useCallback((projectId, status) => {
+    const project = projects.find((item) => item.id === projectId)
+    if (!project || project.status === status) return
+    update((current) => ({
+      ...current,
+      projects: current.projects.map((item) => (item.id !== projectId ? item : touch({
+        ...item, status,
+      })))
+    }))
+    showToast.current(`「${project.name}」→ ${status}`)
+  }, [projects, update])
+
   const toggleTodo = useCallback((projectId, todoId) => update((current) => ({
     ...current,
     projects: current.projects.map((project) => (project.id !== projectId ? project : touch({
@@ -801,7 +814,7 @@ export function ConsoleView({ portfolio }) {
     }
     if (tab === 'ledger') return h(LedgerScreen, { ledger, accents })
     if (tab === 'board') return h(BoardScreen, { groups, today, accents, onOpen: setSelectedId })
-    if (tab === 'kanban') return h(KanbanScreen, { columns, accents, onOpen: setSelectedId })
+    if (tab === 'kanban') return h(DashboardScreen, { projects: selection, today, accents, onOpen: setSelectedId, onMove: moveProject })
     if (tab === 'list') return h(ListScreen, { rows, today, accents, onOpen: setSelectedId })
     if (tab === 'calendar') {
       return h(CalendarScreen, {

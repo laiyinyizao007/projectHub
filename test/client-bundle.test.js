@@ -114,7 +114,7 @@ test('没有项目时：页签、模块导航、KPI 与问一句都在', () => {
   const { plugin } = registerPlugin()
   const html = render(plugin, readyPortfolio([]))
   assert.match(html, /项目总控台/)
-  for (const label of ['概览', '模块看板', '状态看板', '列表', '日历', '时间线', '待跟进']) {
+  for (const label of ['概览', '模块看板', '看板', '列表', '日历', '时间线', '待跟进']) {
     assert.ok(html.includes(label), `缺少页签：${label}`)
   }
   assert.match(html, /role="tablist"/)
