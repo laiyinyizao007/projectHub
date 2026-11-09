@@ -129,6 +129,58 @@ async function fetchSubIssues(fetchImpl, { token, owner, repo, number }) {
 }
 
 /**
+ * 进展记录用**项目组 Issue 的评论**存，GitHub 因此是唯一真相。
+ * 幂等靠评论末尾的隐藏标记：
+ *   <!-- dsh-progress:<记录id> kind=<类型> -->
+ * 读回时按标记还原 id 与类型，标记本身从正文里剥掉。
+ */
+const PROGRESS_MARK = /<!--\s*dsh-progress:([^\s>]+)(?:\s+kind=([a-z]+))?\s*-->\s*$/i
+
+/** 组装一条评论正文（正文 + 标记）。 */
+function progressBody(update) {
+  const text = String(update?.text ?? '').trim()
+  const id = String(update?.id ?? `u_${Math.random().toString(36).slice(2, 10)}`)
+  const kind = String(update?.kind ?? 'note')
+  return { body: `${text}\n\n<!-- dsh-progress:${id} kind=${kind} -->`, id, kind }
+}
+
+/** 从评论正文里解析出进展记录。 */
+function parseProgressComment(body) {
+  const text = String(body ?? '')
+  const m = PROGRESS_MARK.exec(text)
+  if (!m) return null
+  return {
+    id: m[1],
+    at: '',
+    kind: m[2] ?? 'note',
+    text: text.slice(0, m.index).trim(),
+  }
+}
+
+/** 取某个 issue 上已有的进展标记（已同步过的记录不再重复发）。 */
+async function fetchProgressMarkers(fetchImpl, { token, owner, repo, number }) {
+  const url = `${API}/repos/${owner}/${repo}/issues/${number}/comments?per_page=100`
+  const list = await gh(fetchImpl, url, { token })
+  const markers = new Set()
+  const records = []
+  for (const c of Array.isArray(list) ? list : []) {
+    const parsed = parseProgressComment(c.body)
+    if (!parsed) continue
+    markers.add(parsed.id)
+    records.push({ ...parsed, at: c.created_at ?? '' })
+  }
+  return { markers, records }
+}
+
+/** 发一条进展评论。 */
+async function postProgressComment(fetchImpl, { token, owner, repo, number, body }) {
+  await gh(fetchImpl, `${API}/repos/${owner}/${repo}/issues/${number}/comments`, {
+    token, method: 'POST', body: { body },
+  })
+  return { ok: true }
+}
+
+/**
  * 组装工作台的项目列表。
  * 返回 { projects, meta } —— meta 记录数据来源与统计，便于 /meta 端点透出。
  */
@@ -183,6 +235,14 @@ export async function fetchGitHubPortfolio({
       })
     }
 
+    // 进展记录：项目组 Issue 的评论
+    let progress = { markers: new Set(), records: [] }
+    try {
+      progress = await fetchProgressMarkers(fetchImpl, { token, owner, repo: repoName, number: issue.number })
+    } catch {
+      progress = { markers: new Set(), records: [] }
+    }
+
     projects.push({
       id: `group:${key}`,
       name: issue.title ?? '',
@@ -198,7 +258,7 @@ export async function fetchGitHubPortfolio({
       tags: labels.filter((l) => l !== GROUP_LABEL && !l.startsWith(GROUP_KEY_PREFIX)),
       createdAt: issue.created_at ?? '',
       updatedAt: issue.updated_at ?? '',
-      updates: [],
+      updates: progress.records.map((r) => ({ id: r.id, at: r.at, kind: r.kind, text: r.text })),
       todos,
       // 额外信息（不进项目记录，但给 /meta 用）
       _meta: {
@@ -405,7 +465,7 @@ export async function applyPortfolioChanges({
   const projectId = await resolveProjectId({ fetchImpl, token, owner, projectNumber })
   if (!projectId) throw new Error(`取不到 Project #${projectNumber} 的节点 id`)
   const prevById = new Map(previous.map((p) => [p.id, p]))
-  const summary = { updated: [], created: [], closedTasks: [], reopenedTasks: [], skipped: [] }
+  const summary = { updated: [], created: [], progress: [], closedTasks: [], reopenedTasks: [], skipped: [] }
 
   for (const p of next) {
     const before = prevById.get(p.id)
@@ -443,6 +503,24 @@ export async function applyPortfolioChanges({
       })
       if (r.ok) summary.updated.push({ name: p.name, field, from: bv, to: av })
       else summary.skipped.push({ name: p.name, why: `${field}：${r.why}` })
+    }
+
+    // 进展记录 → 项目组 Issue 的评论
+    // 只发**还没有发过的**（id 来自评论里的隐藏标记），所以重复保存不会刷屏。
+    const syncedIds = new Set((before.updates ?? []).map((u) => u.id))
+    for (const u of p.updates ?? []) {
+      if (!u?.id || syncedIds.has(u.id)) continue
+      const text = String(u.text ?? '').trim()
+      if (!text) continue
+      const body = progressBody(u)
+      try {
+        await postProgressComment(fetchImpl, {
+          token, owner, repo: meta.repo, number: meta.issueNumber, body: body.body,
+        })
+        summary.progress.push({ name: p.name, id: body.id, kind: body.kind })
+      } catch (error) {
+        summary.skipped.push({ name: p.name, why: `进展记录：${error instanceof Error ? error.message : String(error)}`.slice(0, 160) })
+      }
     }
 
     // 待跟进勾选 → 关闭/重开 GitHub issue

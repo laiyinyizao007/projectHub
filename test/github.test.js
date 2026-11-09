@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { fetchGitHubPortfolio, mergeHumanUpdates } from '../dsh/github.js'
 
 /** 假 fetch：按 URL 形态返回夹具，验证 provider 的组装逻辑（不打真网络）。 */
-function fakeFetch(groups, boardItems, subIssues = {}) {
+function fakeFetch(groups, boardItems, subIssues = {}, comments = {}) {
   return async (url, init = {}) => {
     const body = init.body ? JSON.parse(init.body) : {}
     const json = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) })
@@ -24,6 +24,8 @@ function fakeFetch(groups, boardItems, subIssues = {}) {
     }
     const m = /\/issues\/(\d+)\/sub_issues/.exec(url)
     if (m) return json(subIssues[m[1]] ?? [])
+    const c = /\/issues\/(\d+)\/comments/.exec(url)
+    if (c) return json(comments[c[1]] ?? [])
     throw new Error(`未预期的 URL: ${url}`)
   }
 }
@@ -132,4 +134,20 @@ test('读路径带回组内仓清单', async () => {
     fetchImpl, token: 't', owner: 'laiyinyizao007', projectNumber: 1,
   })
   assert.deepEqual(projects[0].repos, ['dsh-desktop', 'dsh-desktop-responsive'])
+})
+
+test('进展记录读回：评论里的标记还原 id 与类型', async () => {
+  const fetchImpl = fakeFetch([GROUP], [ITEM], {}, {
+    11: [
+      { body: '联调通过\n\n<!-- dsh-progress:u_7 kind=progress -->', created_at: '2026-11-01T00:00:00Z' },
+      { body: '普通评论，不是进展记录' },
+    ],
+  })
+  const { projects } = await fetchGitHubPortfolio({
+    fetchImpl, token: 't', owner: 'laiyinyizao007', projectNumber: 1,
+  })
+  assert.equal(projects[0].updates.length, 1, '只认带标记的评论')
+  assert.equal(projects[0].updates[0].id, 'u_7')
+  assert.equal(projects[0].updates[0].kind, 'progress')
+  assert.equal(projects[0].updates[0].text, '联调通过')
 })

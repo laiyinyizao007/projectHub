@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { applyPortfolioChanges } from '../dsh/github.js'
 
 /** 记录所有写操作，并按需返回夹具。 */
-function recorder({ groupIssues = [], boardItems = [], issues = [], failGraphql = false } = {}) {
+function recorder({ groupIssues = [], boardItems = [], issues = [], comments = {}, failGraphql = false } = {}) {
   const writes = []
   const calls = []
   const fetchImpl = async (url, init = {}) => {
@@ -41,6 +41,14 @@ function recorder({ groupIssues = [], boardItems = [], issues = [], failGraphql 
         return json({ data: { repository: { issue: { id: 'I_NEW', number: 99 } } } })
       }
       throw new Error('未预期的 GraphQL: ' + query.slice(0, 60))
+    }
+    if (url.includes('/comments?per_page=100')) {
+      const m = /\/issues\/(\d+)\/comments/.exec(url)
+      return json(comments[m?.[1]] ?? [])
+    }
+    if (url.includes('/comments')) {
+      writes.push({ type: 'create-comment', url, body })
+      return json({})
     }
     if (url.includes('/issues') && init.method === 'POST') {
       writes.push({ type: 'create-issue', url, body })
@@ -142,4 +150,24 @@ test('远端读失败 → 直接抛错，一个字都不写', async () => {
     /网络中断/,
   )
   assert.equal(writes.length, 0, '读失败时不应有任何写操作')
+})
+
+test('进展记录写回：发成项目组 Issue 的评论，按标记幂等', async () => {
+  const { fetchImpl, writes } = recorder({ boardItems: [BOARD_ITEM] })
+  const previous = [{ ...PREVIOUS[0], updates: [{ id: 'u_old', kind: 'progress', text: '旧进展' }] }]
+  const next = [{
+    ...PREVIOUS[0],
+    updates: [
+      { id: 'u_old', kind: 'progress', text: '旧进展' },        // 已同步过 → 不该重发
+      { id: 'u_new', kind: 'blocker', text: '新阻塞' },          // 新的 → 要发
+    ],
+  }]
+  const summary = await applyPortfolioChanges({
+    fetchImpl, token: 't', owner: 'o', projectNumber: 1, previous, next,
+  })
+  const comments = writes.filter((w) => w.type === 'create-comment')
+  assert.equal(comments.length, 1, '只应发一条新评论')
+  assert.match(comments[0].body.body, /新阻塞/)
+  assert.match(comments[0].body.body, /<!--\s*dsh-progress:u_new kind=blocker\s*-->/)
+  assert.equal(summary.progress.length, 1)
 })
