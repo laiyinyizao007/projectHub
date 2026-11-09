@@ -3,7 +3,12 @@
  * 时间一律用本地日历日（YYYY-MM-DD）比较，避免时区把「还剩几天」算错。
  */
 
-export const MODULES = ['公司项目', '日常工作', '其他项目']
+// 分类必须是「看板上的分类字段」的真实取值，也就是 GitHub Projects 里
+// 那三个分类。上游默认写的是「公司项目/日常工作/其他项目」，可那三个值在
+// 看板里一个都不存在——侧栏会排出三个永远 0 的幽灵页签，真实分类反而被
+// 挤到搜索框后面看不见。'其他项目' 只留作「没填分类」的兜底名。
+export const MODULES = ['客户交付', '个人产品', '效率工具']
+export const UNCLASSIFIED_MODULE = '其他项目'
 export const STATUSES = ['进行中', '待启动', '阻塞', '已完成', '暂停']
 export const RISK_LEVELS = ['overdue', 'blocked', 'urgent', 'slipping', 'soon', 'unscheduled', 'normal', 'done']
 
@@ -151,7 +156,7 @@ export function sortByRisk(projects, today = todayISO()) {
 
 /** 一个模块的小结。 */
 export function moduleRollup(projects, module, today = todayISO()) {
-  const items = module === '全部' ? projects : projects.filter((project) => (project?.module || '其他项目') === module)
+  const items = module === '全部' ? projects : projects.filter((project) => (project?.module || UNCLASSIFIED_MODULE) === module)
   const risks = items.map((project) => projectRisk(project, today))
   return {
     module,
@@ -168,7 +173,7 @@ export function moduleRollup(projects, module, today = todayISO()) {
 export function moduleNames(projects) {
   const extra = []
   for (const project of projects) {
-    const module = project?.module || '其他项目'
+    const module = project?.module || UNCLASSIFIED_MODULE
     if (!MODULES.includes(module) && !extra.includes(module)) extra.push(module)
   }
   return [...MODULES, ...extra]

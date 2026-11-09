@@ -68,7 +68,7 @@ test('GET/POST /state 完成一次完整读写，并对旧版本号返回 409', 
 
     const body = {
       revision: 0,
-      state: { version: 1, projects: [{ id: 'p1', name: '结算系统', module: '公司项目', dueDate: '2026-10-20', progress: 40 }] }
+      state: { version: 1, projects: [{ id: 'p1', name: '结算系统', module: '客户交付', dueDate: '2026-10-20', progress: 40 }] }
     }
     const write = routeFor(routes, `${PREFIX}/state`, 'POST')
     const written = await write.fetch(new Request(`http://127.0.0.1${PREFIX}/state`, {
@@ -93,7 +93,7 @@ test('GET/POST /state 完成一次完整读写，并对旧版本号返回 409', 
   })
 })
 
-const AI_PROJECT = { id: 'p1', name: '订单结算服务重构', module: '公司项目', status: '进行中', dueDate: '2026-10-06', startedOn: '2026-09-08', progress: 55, todos: [], updates: [] }
+const AI_PROJECT = { id: 'p1', name: '订单结算服务重构', module: '客户交付', status: '进行中', dueDate: '2026-10-06', startedOn: '2026-09-08', progress: 55, todos: [], updates: [] }
 
 /** 用假的 llm 服务跑一遍服务端 AI 路径：prompt → 流 → 组装 → 解析 → 收敛。 */
 async function withAiServer(services, run) {
@@ -213,7 +213,7 @@ test('没有可用模型时，/ai 退回本地规则并说明原因', async () =
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body)
     }))
-    const projects = [{ id: 'p1', name: '订单结算服务重构', module: '公司项目', status: '进行中', dueDate: '2026-10-06', startedOn: '2026-09-08', progress: 55, todos: [], updates: [] }]
+    const projects = [{ id: 'p1', name: '订单结算服务重构', module: '客户交付', status: '进行中', dueDate: '2026-10-06', startedOn: '2026-09-08', progress: 55, todos: [], updates: [] }]
 
     const update = await call({ instruction: '把订单结算服务重构的 DDL 改到下周五，进度调整到 80%', projects, today: '2026-10-08' })
     assert.equal(update.status, 200)

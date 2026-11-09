@@ -98,12 +98,12 @@ test('clampProgress 与 openTodos 处理脏数据', () => {
 
 test('moduleRollup 与 moduleNames 覆盖固定模块和自定义模块', () => {
   const list = [
-    project({ id: 'a', module: '公司项目', dueDate: '2026-10-01' }),
-    project({ id: 'b', module: '日常工作' }),
+    project({ id: 'a', module: '客户交付', dueDate: '2026-10-01' }),
+    project({ id: 'b', module: '效率工具' }),
     project({ id: 'c', module: '副业试验', todos: [{ id: 't', title: 'x', done: false }] })
   ]
-  assert.deepEqual(moduleNames(list).slice(0, 4), ['公司项目', '日常工作', '其他项目', '副业试验'])
-  const rollup = moduleRollup(list, '公司项目', TODAY)
+  assert.deepEqual(moduleNames(list).slice(0, 4), ['客户交付', '个人产品', '效率工具', '副业试验'])
+  const rollup = moduleRollup(list, '客户交付', TODAY)
   assert.equal(rollup.total, 1)
   assert.equal(rollup.danger, 1)
   assert.equal(moduleRollup(list, '全部', TODAY).total, 3)

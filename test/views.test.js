@@ -10,7 +10,7 @@ const TODAY = '2026-10-08' // 周四，本周日 = 2026-10-11
 const project = (over = {}) => ({
   id: over.id ?? 'p1',
   name: over.name ?? '结算系统',
-  module: over.module ?? '公司项目',
+  module: over.module ?? '客户交付',
   status: over.status ?? '进行中',
   dueDate: over.dueDate ?? '2026-10-30',
   startedOn: over.startedOn ?? '2026-10-01',
@@ -25,9 +25,9 @@ const project = (over = {}) => ({
 
 const POOL = [
   project({ id: 'a', name: '结算系统', dueDate: '2026-10-01', todos: [{ id: 't1', title: '对账', dueDate: '2026-10-06', done: false }] }),
-  project({ id: 'b', name: '官网改版', module: '日常工作', dueDate: '2026-10-09', tags: ['设计'] }),
+  project({ id: 'b', name: '官网改版', module: '效率工具', dueDate: '2026-10-09', tags: ['设计'] }),
   project({ id: 'c', name: '小程序', module: '其他项目', status: '阻塞', dueDate: '2026-11-20' }),
-  project({ id: 'd', name: '内训课件', module: '日常工作', status: '已完成', dueDate: '2026-09-01', todos: [] }),
+  project({ id: 'd', name: '内训课件', module: '效率工具', status: '已完成', dueDate: '2026-09-01', todos: [] }),
   project({ id: 'e', name: '副业原型', module: '副业试验', dueDate: '2026-12-31' })
 ]
 
@@ -72,7 +72,7 @@ test('searchText 覆盖名称、负责人、标签、待跟进与最近进展', 
 })
 
 test('selectProjects 同时应用模块、智能视图与关键字', () => {
-  const byModule = selectProjects(POOL, { module: '日常工作' }, TODAY).map((item) => item.id)
+  const byModule = selectProjects(POOL, { module: '效率工具' }, TODAY).map((item) => item.id)
   assert.deepEqual(byModule, ['b', 'd'])
 
   const byView = selectProjects(POOL, { view: 'attention' }, TODAY).map((item) => item.id)
@@ -81,7 +81,7 @@ test('selectProjects 同时应用模块、智能视图与关键字', () => {
   const byKeyword = selectProjects(POOL, { keyword: '小程序' }, TODAY).map((item) => item.id)
   assert.deepEqual(byKeyword, ['c'])
 
-  const combined = selectProjects(POOL, { module: '日常工作', view: 'done' }, TODAY).map((item) => item.id)
+  const combined = selectProjects(POOL, { module: '效率工具', view: 'done' }, TODAY).map((item) => item.id)
   assert.deepEqual(combined, ['d'])
 
   assert.deepEqual(selectProjects(POOL, { keyword: '不存在的词' }, TODAY), [])
@@ -106,11 +106,11 @@ test('summarize 汇总计数与平均进度', () => {
 
 test('railModules 固定模块在前，自定义模块在后并带计数', () => {
   const rail = railModules(POOL, TODAY)
-  assert.deepEqual(rail.map((item) => item.name), ['公司项目', '日常工作', '其他项目', '副业试验'])
+  assert.deepEqual(rail.map((item) => item.name), ['客户交付', '个人产品', '效率工具', '其他项目', '副业试验'])
   assert.equal(rail[0].total, 1)
-  assert.equal(rail[1].total, 2)
-  assert.equal(rail[0].overdue, 1, '公司项目里有一个逾期')
-  assert.equal(rail[2].danger, 1, '其他项目下的阻塞计入需关注')
+  assert.equal(rail[2].total, 2)
+  assert.equal(rail[0].overdue, 1, '客户交付里有一个逾期')
+  assert.equal(rail[3].danger, 1, '其他项目下的阻塞计入需关注')
 })
 
 test('railViews 给出每个智能视图的计数', () => {
@@ -125,8 +125,8 @@ test('railViews 给出每个智能视图的计数', () => {
 
 test('groupByModule 丢掉空模块并按风险排序组内项目', () => {
   const groups = groupByModule(POOL, TODAY)
-  assert.deepEqual(groups.map((group) => group.module), ['公司项目', '日常工作', '其他项目', '副业试验'])
-  const daily = groups.find((group) => group.module === '日常工作')
+  assert.deepEqual(groups.map((group) => group.module), ['客户交付', '效率工具', '其他项目', '副业试验'], '空模块不出现')
+  const daily = groups.find((group) => group.module === '效率工具')
   assert.deepEqual(daily.projects.map((item) => item.id), ['b', 'd'], '组内也按风险排序')
   assert.equal(daily.stats.total, 2)
   assert.ok(!groups.some((group) => group.module === '空的模块'))

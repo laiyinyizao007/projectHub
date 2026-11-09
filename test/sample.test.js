@@ -45,8 +45,8 @@ test('示例项目字段完整、类型正确、id 唯一', () => {
   }
 })
 
-test('日常工作里必须有技术分享准备与季度汇报', () => {
-  const daily = buildSampleProjects(TODAY).filter((project) => project.module === '日常工作')
+test('效率工具里必须有技术分享准备与季度汇报', () => {
+  const daily = buildSampleProjects(TODAY).filter((project) => project.module === '效率工具')
   assert.ok(daily.length >= 3)
   assert.ok(daily.some((project) => /分享/.test(project.name)), '缺少技术分享准备')
   assert.ok(daily.some((project) => /季度汇报/.test(project.name)), '缺少季度汇报')

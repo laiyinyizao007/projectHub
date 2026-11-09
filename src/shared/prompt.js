@@ -2,7 +2,7 @@
  * 把项目数据变成可交给 Agent 的提示词，以及常用文档草稿。
  * 面板只负责生成文本、复制与导出；发送由用户在旁边的原生会话里完成。
  */
-import { clampProgress, formatRemaining, latestUpdate, openTodos, overview, projectRisk, sortByRisk } from './analysis.js'
+import { clampProgress, formatRemaining, latestUpdate, openTodos, overview, projectRisk, sortByRisk, UNCLASSIFIED_MODULE } from './analysis.js'
 const KIND_LABELS = { note: '记录', progress: '进展', blocker: '阻塞', decision: '决策' }
 
 function bullets(items, empty = '（暂无）') {
@@ -20,7 +20,7 @@ export function projectBrief(project, today) {
   const doneTodos = (Array.isArray(project?.todos) ? project.todos : []).filter((todo) => todo?.done === true)
   return [
     `### ${project?.name ?? '未命名项目'}`,
-    `- 模块：${project?.module || '其他项目'}`,
+    `- 模块：${project?.module || UNCLASSIFIED_MODULE}`,
     `- 状态：${project?.status || '进行中'}`,
     `- 进度：${clampProgress(project)}%`,
     `- 负责人：${project?.owner || '未指定'}`,
@@ -110,7 +110,7 @@ export function buildDocDraft(kind, { projects = [], project = null, today }) {
     const rows = sortByRisk(only, today).map((item) => {
       const risk = item.risk
       const todo = openTodos(item.project)
-      return `| ${item.project.name} | ${item.project.module || '其他项目'} | ${item.project.status || '进行中'} | ${clampProgress(item.project)}% | ${item.project.dueDate || '未排期'} | ${risk.label} — ${risk.detail} | ${todo.length} |`
+      return `| ${item.project.name} | ${item.project.module || UNCLASSIFIED_MODULE} | ${item.project.status || '进行中'} | ${clampProgress(item.project)}% | ${item.project.dueDate || '未排期'} | ${risk.label} — ${risk.detail} | ${todo.length} |`
     })
     return [
       `# 风险清单 · ${title}`,
@@ -171,7 +171,7 @@ export function buildDocDraft(kind, { projects = [], project = null, today }) {
     const latest = latestUpdate(item.project)
     return [
       `### ${item.project.name}`,
-      `- 模块／状态：${item.project.module || '其他项目'}／${item.project.status || '进行中'}`,
+      `- 模块／状态：${item.project.module || UNCLASSIFIED_MODULE}／${item.project.status || '进行中'}`,
       `- 进度：${clampProgress(item.project)}%，${formatRemaining(item.project.dueDate, today)}`,
       `- 时间风险：${item.risk.label} — ${item.risk.detail}`,
       `- 最近进展：${latest ? `${String(latest.at).slice(0, 10)} ${latest.text}` : '无记录'}`,

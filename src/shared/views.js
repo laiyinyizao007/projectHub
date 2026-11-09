@@ -2,7 +2,7 @@
  * 面板上的「模块化」视图逻辑：按模块分组、智能视图筛选、关键字搜索。
  * 纯函数，测试里直接调用。
  */
-import { DANGER_LEVELS, WATCH_LEVELS, clampProgress, daysLeft, endOfWeek, latestUpdate, moduleNames, openTodos, projectRisk, sortByRisk, todayISO } from './analysis.js'
+import { DANGER_LEVELS, WATCH_LEVELS, clampProgress, daysLeft, endOfWeek, latestUpdate, moduleNames, openTodos, projectRisk, sortByRisk, todayISO, UNCLASSIFIED_MODULE } from './analysis.js'
 export const ATTENTION_LEVELS = [...DANGER_LEVELS, ...WATCH_LEVELS]
 
 /** 左侧栏的智能视图。`view` 用于筛选；「全部项目」是模块轴，不是筛选。 */
@@ -53,7 +53,7 @@ export function selectProjects(projects, state = {}, today = todayISO()) {
   const keyword = String(state.keyword ?? '').trim().toLowerCase()
   return sortByRisk(projects, today)
     .map((item) => item.project)
-    .filter((project) => module === '全部' || (project?.module || '其他项目') === module)
+    .filter((project) => module === '全部' || (project?.module || UNCLASSIFIED_MODULE) === module)
     .filter((project) => !view || matchesSmartView(project, view, today))
     .filter((project) => !keyword || searchText(project).includes(keyword))
 }
@@ -79,7 +79,7 @@ export function summarize(projects, today = todayISO()) {
 export function railModules(projects, today = todayISO()) {
   const names = moduleNames(projects)
   return names.map((name) => {
-    const items = projects.filter((project) => (project?.module || '其他项目') === name)
+    const items = projects.filter((project) => (project?.module || UNCLASSIFIED_MODULE) === name)
     const stats = summarize(items, today)
     return { name, total: stats.total, danger: stats.danger + stats.watch, overdue: stats.overdue }
   })
@@ -102,8 +102,8 @@ export function groupByModule(projects, today = todayISO()) {
     .filter((entry) => entry.total > 0)
     .map((entry) => ({
       module: entry.name,
-      projects: sortByRisk(projects.filter((project) => (project?.module || '其他项目') === entry.name), today)
+      projects: sortByRisk(projects.filter((project) => (project?.module || UNCLASSIFIED_MODULE) === entry.name), today)
         .map((item) => item.project),
-      stats: summarize(projects.filter((project) => (project?.module || '其他项目') === entry.name), today)
+      stats: summarize(projects.filter((project) => (project?.module || UNCLASSIFIED_MODULE) === entry.name), today)
     }))
 }

@@ -2,10 +2,10 @@
  * 「问一句」：在本地已存的项目数据上做规则化问答。
  * 不依赖会话或模型，打开工作台即可用；需要更深的分析时由面板生成提示词交给 Agent。
  */
-import { DANGER_LEVELS, WATCH_LEVELS, clampProgress, daysLeft, endOfWeek, formatRemaining, latestUpdate, openTodos, overview, projectRisk, sortByRisk, todayISO } from './analysis.js'
+import { DANGER_LEVELS, WATCH_LEVELS, clampProgress, daysLeft, endOfWeek, formatRemaining, latestUpdate, openTodos, overview, projectRisk, sortByRisk, todayISO, UNCLASSIFIED_MODULE } from './analysis.js'
 const RISKY = [...DANGER_LEVELS, ...WATCH_LEVELS]
 
-const line = (project, risk) => `· ${project.name}（${project.module || '其他项目'}｜${project.status || '进行中'}｜${formatRemaining(project.dueDate, risk.today)}）${risk.detail ? ` — ${risk.detail}` : ''}`
+const line = (project, risk) => `· ${project.name}（${project.module || UNCLASSIFIED_MODULE}｜${project.status || '进行中'}｜${formatRemaining(project.dueDate, risk.today)}）${risk.detail ? ` — ${risk.detail}` : ''}`
 
 function projectLine(project, today) {
   const risk = projectRisk(project, today)
@@ -58,7 +58,7 @@ function answerProject(project, today) {
   const latest = latestUpdate(project)
   const todos = openTodos(project)
   const lines = [
-    `${project.name}（${project.module || '其他项目'}）`,
+    `${project.name}（${project.module || UNCLASSIFIED_MODULE}）`,
     `状态：${project.status || '进行中'}｜进度：${clampProgress(project)}%｜${formatRemaining(project.dueDate, today)}`,
     `风险：${risk.label} — ${risk.detail}`,
     project.owner ? `负责人：${project.owner}` : '',

@@ -5,7 +5,7 @@
  * 维度：风险分布 / 状态列（看板）/ 模块负载 / 进度分布 / 负责人负载 /
  *       日历（按天）/ 时间线（按区间）/ 待跟进（按到期紧迫度）。
  */
-import { DANGER_LEVELS, WATCH_LEVELS, RISK_META, STATUSES, clampProgress, dayStart, daysLeft, endOfWeek, moduleNames, openTodos, projectRisk, sortByRisk, todayISO } from './analysis.js'
+import { DANGER_LEVELS, WATCH_LEVELS, RISK_META, STATUSES, clampProgress, dayStart, daysLeft, endOfWeek, moduleNames, openTodos, projectRisk, sortByRisk, todayISO, UNCLASSIFIED_MODULE } from './analysis.js'
 import { summarize } from './views.js'
 export const MODULE_ACCENTS = ['indigo', 'teal', 'amber', 'violet', 'rose', 'cyan']
 
@@ -96,7 +96,7 @@ export function moduleWorkload(projects, today = todayISO()) {
   const accents = moduleAccentMap(projects)
   return moduleNames(projects)
     .map((module) => {
-      const items = projects.filter((project) => (project?.module || '其他项目') === module)
+      const items = projects.filter((project) => (project?.module || UNCLASSIFIED_MODULE) === module)
       const risks = items.map((project) => projectRisk(project, today))
       return {
         module,
@@ -196,7 +196,7 @@ export function calendarMonth(projects, today = todayISO(), key = monthKeyOf(tod
           label: risk.label,
           title: project.name,
           projectId: project.id,
-          module: project.module || '其他项目'
+          module: project.module || UNCLASSIFIED_MODULE
         })
       }
       for (const todo of openTodos(project)) {
@@ -211,7 +211,7 @@ export function calendarMonth(projects, today = todayISO(), key = monthKeyOf(tod
           title: todo.title,
           projectId: project.id,
           projectName: project.name,
-          module: project.module || '其他项目'
+          module: project.module || UNCLASSIFIED_MODULE
         })
       }
     }
@@ -326,7 +326,7 @@ export function followUpBuckets(projects, today = todayISO()) {
         todoId: todo.id,
         projectId: project.id,
         projectName: project.name,
-        module: project.module || '其他项目',
+        module: project.module || UNCLASSIFIED_MODULE,
         title: todo.title,
         owner: todo.owner || project.owner || '',
         dueDate: todo.dueDate,

@@ -4,7 +4,7 @@
  * 这一层是纯函数：模型只负责产出 JSON 计划，**校验、匹配、预览、应用**都在这里做，
  * 所以模型说错话不会直接改数据；模型不可用时还能退回本地规则解析。
  */
-import { MODULES, STATUSES, clampProgress, todayISO } from './analysis.js'
+import { MODULES, STATUSES, UNCLASSIFIED_MODULE, clampProgress, todayISO } from './analysis.js'
 import { answerQuestion } from './query.js'
 export const AI_INTENTS = ['add', 'update', 'delete', 'todo', 'log', 'query']
 export const AI_OPS = ['add', 'update', 'delete', 'addTodo', 'doneTodo', 'addLog']
@@ -15,6 +15,12 @@ const FIELD_LABELS = {
   progress: '进度', summary: '说明', link: '链接'
 }
 const KIND_LABELS = { note: '记录', progress: '进展', blocker: '阻塞', decision: '决策' }
+
+// 旧分类名 → 现分类名。用户嘴上还按老习惯说的时候也能落对地方。
+const LEGACY_MODULE_ALIASES = [
+  ['公司项目', '客户交付'],
+  ['日常工作', '效率工具']
+]
 
 const pad = (value) => String(value).padStart(2, '0')
 const dayOf = (value) => {
@@ -111,7 +117,7 @@ function normalizeAdd(raw, today, issues) {
     op: 'add',
     project: {
       name,
-      module: String(raw?.module ?? '').trim() || '其他项目',
+      module: String(raw?.module ?? '').trim() || UNCLASSIFIED_MODULE,
       status,
       owner: String(raw?.owner ?? '').trim(),
       startedOn: resolveDate(raw?.startedOn, today),
@@ -465,7 +471,11 @@ export function planFromRules(instruction, projects = [], today = todayISO()) {
   }
 
   if (has(text, /新增|添加|加一个|建一个|创建一个|录入|记一个新项目/)) {
-    const module = MODULES.find((name) => text.includes(name)) ?? '其他项目'
+    // 旧分类名（公司项目/日常工作）在看板里不存在，但用户可能照旧习惯说。
+    // 说不了就不猜，落到「其他项目」兜底。
+    const module = MODULES.find((name) => text.includes(name))
+      ?? (LEGACY_MODULE_ALIASES.find(([alias]) => text.includes(alias))?.[1])
+      ?? UNCLASSIFIED_MODULE
     const name = text
       .replace(/^(帮我|请|麻烦)?\s*(新增|添加|新建|创建|录入)?\s*(一个|一条|个)?\s*(项目)?\s*[:：]?\s*/, '')
       .split(/[，,。；;]|（|\(/)[0]
@@ -501,7 +511,7 @@ export function planSchemaDoc(today = todayISO()) {
     `今天是 ${today}。把用户的指令翻译成一个 JSON 对象，不要输出任何解释或 Markdown 代码块之外的文字。`,
     'JSON 结构：{ "intent": "add|update|delete|todo|log|query", "reply": "给用户看的一句话", "actions": [...] }',
     'actions 里每一项是下列之一：',
-    '- 新增项目：{ "op":"add", "name":"项目名", "module":"公司项目|日常工作|其他项目", "status":"进行中|待启动|阻塞|暂停|已完成", "owner":"", "startedOn":"YYYY-MM-DD", "dueDate":"YYYY-MM-DD", "progress":0, "summary":"一句话", "tags":["标签"] }',
+    `- 新增项目：{ "op":"add", "name":"项目名", "module":"${MODULES.join('|')}", "status":"进行中|待启动|阻塞|暂停|已完成", "owner":"", "startedOn":"YYYY-MM-DD", "dueDate":"YYYY-MM-DD", "progress":0, "summary":"一句话", "tags":["标签"] }`,
     '- 修改项目：{ "op":"update", "target":"项目名或 id", "changes":{ 只写要改的字段，字段名同上 } }',
     '- 删除项目：{ "op":"delete", "target":"项目名或 id" }',
     '- 新增待跟进：{ "op":"addTodo", "target":"项目名或 id", "title":"事项", "dueDate":"YYYY-MM-DD", "owner":"" }',

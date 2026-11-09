@@ -11,7 +11,7 @@ const TODAY = '2026-10-08' // 周四；本周日 = 2026-10-11
 const project = (over = {}) => ({
   id: over.id ?? 'p1',
   name: over.name ?? '结算系统',
-  module: over.module ?? '公司项目',
+  module: over.module ?? '客户交付',
   status: over.status ?? '进行中',
   owner: over.owner ?? '我',
   dueDate: over.dueDate ?? '2026-10-30',
@@ -27,17 +27,17 @@ const todo = (id, dueDate, done = false) => ({ id, title: `事项 ${id}`, owner:
 
 const POOL = [
   project({ id: 'a', name: '结算系统', dueDate: '2026-10-01', progress: 55, todos: [todo('t1', '2026-10-06'), todo('t2', '2026-10-09')] }),
-  project({ id: 'b', name: '官网改版', module: '日常工作', owner: '小李', dueDate: '2026-10-09', progress: 30, todos: [todo('t3', '2026-10-20')] }),
+  project({ id: 'b', name: '官网改版', module: '效率工具', owner: '小李', dueDate: '2026-10-09', progress: 30, todos: [todo('t3', '2026-10-20')] }),
   project({ id: 'c', name: '小程序', module: '其他项目', status: '阻塞', dueDate: '2026-11-20', progress: 15 }),
-  project({ id: 'd', name: '内训课件', module: '日常工作', status: '已完成', dueDate: '2026-09-01', progress: 100 }),
+  project({ id: 'd', name: '内训课件', module: '效率工具', status: '已完成', dueDate: '2026-09-01', progress: 100 }),
   project({ id: 'e', name: '无期项目', module: '其他项目', status: '待启动', dueDate: '', progress: 0 }),
   project({ id: 'f', name: '落后项目', startedOn: '2026-09-01', dueDate: '2026-10-20', progress: 10 })
 ]
 
 test('moduleAccentMap 给每个模块固定颜色，顺序稳定', () => {
   const map = moduleAccentMap(POOL)
-  assert.deepEqual(Object.keys(map), ['公司项目', '日常工作', '其他项目'])
-  assert.deepEqual(Object.values(map), MODULE_ACCENTS.slice(0, 3))
+  assert.deepEqual(Object.keys(map), ['客户交付', '个人产品', '效率工具', '其他项目'])
+  assert.deepEqual(Object.values(map), MODULE_ACCENTS.slice(0, 4))
   assert.deepEqual(moduleAccentMap(POOL), map, '同样输入应得到同样映射')
 })
 
@@ -84,11 +84,11 @@ test('statusColumns 用固定状态顺序，列内按风险排序', () => {
 
 test('moduleWorkload 给出每个模块的构成与占比', () => {
   const rows = moduleWorkload(POOL, TODAY)
-  assert.deepEqual(rows.map((row) => row.module), ['公司项目', '日常工作', '其他项目'])
-  const daily = rows.find((row) => row.module === '日常工作')
+  assert.deepEqual(rows.map((row) => row.module), ['客户交付', '效率工具', '其他项目'], '没有项目的分类不进负载表')
+  const daily = rows.find((row) => row.module === '效率工具')
   assert.equal(daily.total, 2)
   assert.equal(daily.normal + daily.watch + daily.danger, 2)
-  assert.equal(daily.accent, MODULE_ACCENTS[1])
+  assert.equal(daily.accent, MODULE_ACCENTS[2])
   assert.ok(!rows.some((row) => row.total === 0))
 })
 
