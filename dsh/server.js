@@ -8,7 +8,10 @@
  *    校验/匹配/应用都在客户端与服务端的纯函数里做，模型不可用时退回本地规则。
  */
 import Schema from '@deepseek-ai/schemastery'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { createProjectStore, MAX_STATE_BYTES, StateError } from './store.js'
+import { fetchGitHubPortfolio, mergeHumanUpdates } from './github.js'
 import { normalizePlan, planFromRules, planSchemaDoc, projectSnapshot } from '../src/shared/aiplan.js'
 import { todayISO } from '../src/shared/analysis.js'
 import { answerQuestion } from '../src/shared/query.js'
@@ -16,7 +19,11 @@ import { answerQuestion } from '../src/shared/query.js'
 export const name = 'dsh-workbench-project-console'
 export const inject = ['connection']
 export const Config = Schema.object({
-  root: Schema.string().required()
+  root: Schema.string().required(),
+  /** GitHub 账号（user login）。配了 + <root>/github-token 存在时，项目结构从 GitHub 读。 */
+  githubOwner: Schema.string(),
+  /** 项目组所在的 Project v2 编号。默认 1 = 任务看板。 */
+  githubProjectNumber: Schema.number(),
 })
 
 const PREFIX = '/api/project-console'
@@ -125,13 +132,45 @@ export function apply(ctx, config) {
     json({ error: error instanceof StateError ? error.message : fallback },
       error instanceof StateError ? error.status : 500)
 
+  /**
+   * 读 GitHub 上的项目层级。令牌放在 <root>/github-token（600 权限）。
+   * 没有令牌或读取失败 → 返回 null，调用方退回本地数据，不影响原有行为。
+   */
+  async function readGitHub(ctx, config) {
+    const tokenPath = join(config.root, 'github-token')
+    let token = ''
+    try {
+      token = (await readFile(tokenPath, 'utf8')).trim()
+    } catch {
+      return null
+    }
+    if (!token) return null
+    try {
+      return await fetchGitHubPortfolio({
+        token,
+        owner: config.githubOwner,
+        projectNumber: config.githubProjectNumber ?? 1,
+      })
+    } catch (error) {
+      // GitHub 读失败时不要让整个面板挂掉：退回本地，并在 meta 里说明原因
+      return { projects: [], meta: { source: 'github-error', message: error instanceof Error ? error.message : String(error) } }
+    }
+  }
+
   ctx.connection.fetch.register({
     path: `${PREFIX}/meta`,
     methods: ['GET'],
     requestBody: 'buffered',
     async fetch() {
       try {
-        return json({ plugin: name, ...(await store.meta()) })
+        const github = await readGitHub(ctx, config)
+        const base = await store.meta()
+        return json({
+          plugin: name,
+          ...base,
+          source: github?.meta?.source ?? 'local',
+          github: github?.meta ?? null,
+        })
       } catch (error) {
         return fail(error, '无法读取项目数据。')
       }
@@ -146,7 +185,16 @@ export function apply(ctx, config) {
     async fetch(request) {
       try {
         if (request?.method === 'POST') {
+          // 写：只落**人工进展**（结构字段由 GitHub 同步，不在这里改）
           return json(await store.write(await readJsonBody(request)))
+        }
+        const github = await readGitHub(ctx, config)
+        if (github) {
+          const { projects, meta } = github
+          const { state } = await store.read()
+          mergeHumanUpdates(projects, state?.projects ?? [])
+          // 响应形状保持与上游一致（不塞额外字段），来源信息放在 /meta
+          return json({ revision: state?.revision ?? 0, state: { version: 1, projects } })
         }
         const { revision, state } = await store.read()
         return json({ revision, state })

@@ -1,7 +1,14 @@
 # 多项目总控台（dsh-workbench-project-console）
 # 把服务端入口插入 Harness 插件树；数据目录放在 DSH 数据目录下，卸载工作台不会删除它。
+#
+# 项目结构从 GitHub 读（可选）：
+#   令牌放在 <root>/github-token（600 权限）。存在且 githubOwner 已配置时，
+#   工作台展示的是 GitHub 上的「项目组 → 任务」原生层级，而不是本地 state.json 的台账。
+#   没有令牌时行为与原来完全一致（本地台账 + 示例数据）。
 - insert:
     - id: project-console
       name: dsh-workbench-project-console
       config:
         root: !!js dshHomePath('project-console')
+        githubOwner: laiyinyizao007
+        githubProjectNumber: 1
