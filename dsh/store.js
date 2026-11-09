@@ -89,6 +89,8 @@ function sanitizeProject(raw) {
     startedOn: isoDate(raw.startedOn),
     progress: clampPercent(raw.progress),
     link: text(raw.link, 500),
+    /** 组内仓清单（一个项目组可以跨多个仓）。 */
+    repos: list(raw.repos).map((r) => text(r, 120)).filter(Boolean).slice(0, 20),
     summary: text(raw.summary, MAX_TEXT),
     tags: list(raw.tags).map((tag) => text(tag, 40)).filter(Boolean).slice(0, 20),
     createdAt: isoStamp(raw.createdAt) || now,

@@ -119,6 +119,9 @@ function normalizeAdd(raw, today, issues) {
       progress: progress === null ? 0 : progress,
       summary: String(raw?.summary ?? '').trim(),
       link: String(raw?.link ?? '').trim(),
+      repos: Array.isArray(raw?.repos)
+        ? raw.repos.map((r) => String(r).trim()).filter(Boolean).slice(0, 20)
+        : [],
       tags: cleanTags(raw?.tags)
     }
   }
@@ -518,6 +521,7 @@ export function projectSnapshot(projects, today = todayISO(), limit = 40) {
     status: project.status || '进行中',
     owner: project.owner || '',
     dueDate: project.dueDate || '',
+    repos: Array.isArray(project.repos) ? project.repos : [],
     progress: clampProgress(project),
     todo: (project.todos ?? []).filter((todo) => todo.done !== true).slice(0, 8).map((todo) => ({ title: todo.title, dueDate: todo.dueDate || '' })),
     lastUpdate: (project.updates ?? []).slice(-2).map((item) => item.text)

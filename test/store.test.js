@@ -144,3 +144,29 @@ test('并发写入被串行化，只有一个成功', async () => {
 test('没有数据目录时报错而不是写到别处', () => {
   assert.throws(() => createProjectStore(''), /数据目录未配置/)
 })
+
+test('项目记录保留组内仓清单（跨仓项目组）', () => {
+  const state = sanitizeState({
+    version: 1,
+    projects: [{
+      id: 'group:dsh',
+      name: '🖥️ DSH 组',
+      module: '效率工具',
+      repos: ['dsh-desktop', 'dsh-desktop-responsive', 'dsh-messenger-gateway'],
+      link: 'https://github.com/laiyinyizao007/dsh-desktop',
+    }],
+  })
+  assert.deepEqual(state.projects[0].repos, ['dsh-desktop', 'dsh-desktop-responsive', 'dsh-messenger-gateway'])
+})
+
+test('组内仓清单做上限收敛，不接受非字符串', () => {
+  const state = sanitizeState({
+    version: 1,
+    projects: [{
+      id: 'g1', name: 'x',
+      repos: [...Array(30).fill('repo'), '', null, 42],
+    }],
+  })
+  assert.equal(state.projects[0].repos.length, 20)
+  assert.ok(state.projects[0].repos.every((r) => typeof r === 'string' && r.length > 0))
+})

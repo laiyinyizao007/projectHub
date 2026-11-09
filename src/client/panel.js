@@ -184,7 +184,8 @@ function dateAfter(days) {
 function blankDraft() {
   return {
     id: '', name: '', module: MODULES[0], status: '进行中', owner: '',
-    startedOn: todayISO(), dueDate: dateAfter(14), progress: 0, link: '', summary: '', tagText: ''
+    startedOn: todayISO(), dueDate: dateAfter(14), progress: 0, link: '', repos: '',
+    summary: '', tagText: ''
   }
 }
 
@@ -199,6 +200,7 @@ function draftFromProject(project) {
     dueDate: project.dueDate ?? '',
     progress: clampProgress(project),
     link: project.link ?? '',
+    repos: Array.isArray(project.repos) ? project.repos.join('、') : '',
     summary: project.summary ?? '',
     tagText: Array.isArray(project.tags) ? project.tags.join('、') : ''
   }
@@ -217,6 +219,7 @@ function projectFromDraft(draft, existing) {
     dueDate: draft.dueDate,
     progress: clampProgress({ progress: Number(draft.progress) }),
     link: draft.link.trim(),
+    repos: draft.repos.split(/[、,，\s]+/).map((r) => r.trim()).filter(Boolean).slice(0, 20),
     summary: draft.summary.trim(),
     tags: draft.tagText.split(/[、,，\s]+/).map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
     updatedAt: now
@@ -417,12 +420,19 @@ function DetailBody({ project, risk, today, onChange, ai, onEdit, onDelete }) {
       h(Progress, { value: project.progress, tone: PROGRESS_TONE[risk.level] ?? '' }),
       h('div', { className: 'pc-chips' }, h(Badge, { tone: risk.tone, dot: true }, risk.label), h('span', { className: 'pc-muted' }, risk.detail))),
 
-    project.summary || project.link || project.tags?.length
+    project.summary || project.link || project.tags?.length || project.repos?.length
       ? h('div', { className: 'pc-block' },
         h('div', { className: 'pc-block-head' }, h('h3', null, '说明')),
         project.summary ? h('div', null, project.summary) : null,
         project.link
           ? h('div', null, h('a', { className: 'pc-mono', href: project.link, target: '_blank', rel: 'noreferrer noopener' }, project.link))
+          : null,
+        project.repos?.length
+          ? h('div', { className: 'pc-muted' },
+            '组内仓：',
+            project.repos.map((repo, index) => h(React.Fragment, null,
+              index > 0 ? '、' : null,
+              h('a', { key: repo, className: 'pc-mono', href: `https://github.com/${repo}`, target: '_blank', rel: 'noreferrer noopener' }, repo))))
           : null,
         project.tags?.length
           ? h('div', { className: 'pc-card-tags' }, project.tags.map((tag) => h('span', { key: tag, className: 'pc-tag' }, tag)))
@@ -549,6 +559,7 @@ export function ProjectForm({ draft, existing, moduleOptions, onSubmit, onCancel
         h('b', null, `${clampProgress({ progress: Number(form.progress) })}%`))),
     h(Field, { label: '相关链接', span: true },
       h('input', { className: 'pc-input', value: form.link, onChange: set('link'), placeholder: '需求文档 / 仓库 / 看板地址', 'aria-label': '相关链接' })),
+      h('input', { className: 'pc-input', value: form.repos, onChange: set('repos'), placeholder: '组内仓：dsh-desktop、dsh-mobile', 'aria-label': '组内仓' }),
     h(Field, { label: '标签', span: true, hint: '用、或逗号分隔' },
       h('input', { className: 'pc-input', value: form.tagText, onChange: set('tagText'), placeholder: '后端、财务', 'aria-label': '标签' })),
     h(Field, { label: '一句话说明', span: true },

@@ -125,3 +125,11 @@ test('跨仓子任务的 id 用它自己所在的仓 —— 防止同号 issue �
   const closed = projects[0].todos.filter((t) => t.done).length
   assert.equal(closed, 1, '只有真正关闭的那个是 done')
 })
+
+test('读路径带回组内仓清单', async () => {
+  const fetchImpl = fakeFetch([GROUP], [ITEM], { 11: [] })
+  const { projects } = await fetchGitHubPortfolio({
+    fetchImpl, token: 't', owner: 'laiyinyizao007', projectNumber: 1,
+  })
+  assert.deepEqual(projects[0].repos, ['dsh-desktop', 'dsh-desktop-responsive'])
+})
