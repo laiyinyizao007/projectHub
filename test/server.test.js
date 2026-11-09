@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Config, apply, inject, name } from '../dsh/server.js'
@@ -101,6 +101,91 @@ test('GET/POST /state 完成一次完整读写，并对旧版本号返回 409', 
     assert.equal(stale.status, 409)
     assert.match((await stale.json()).error, /其他窗口/)
   })
+})
+
+test('版本号过期时：回 409，而且**一个字段都不能写进 GitHub**', async () => {
+  // 以前是先写 GitHub 再查版本号：409 抛出来时 GitHub 已经被改了。
+  // 客户端收到「保存失败」，GitHub 上却已经变了 —— 乐观锁形同虚设。
+  const root = await mkdtemp(join(tmpdir(), 'project-console-stale-'))
+  const routes = []
+  const ctx = { connection: { fetch: { register: (route) => routes.push(route) } } }
+  const writes = []
+  const originalFetch = globalThis.fetch
+
+  const boardNode = {
+    id: 'ITEM1',
+    content: { __typename: 'Issue', id: 'I_GROUP', title: '组', number: 1 },
+    fieldValues: { nodes: [
+      { name: '进行中', field: { name: '推进状态' } },
+      { number: 20, field: { name: '进度' } },
+    ] },
+  }
+  const boardResponse = {
+    data: { repositoryOwner: { projectV2: {
+      id: 'P1',
+      fields: { nodes: [
+        { __typename: 'ProjectV2Field', id: 'F_PROG', name: '进度' },
+        { __typename: 'ProjectV2SingleSelectField', id: 'F_STAT', name: '推进状态',
+          options: [{ id: 'O_WIP', name: '进行中' }, { id: 'O_IDLE', name: '休眠' }] },
+      ] },
+      items: { nodes: [boardNode], pageInfo: { hasNextPage: false, endCursor: null } },
+    } } },
+  }
+
+  const groupIssue = {
+    id: 1, node_id: 'I_GROUP', number: 11, title: '组',
+    repository_url: 'https://api.github.com/repos/o/repo-1',
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z',
+    labels: [{ name: 'type: group' }, { name: 'group:dsh' }],
+    body: '组说明\n\n- 分类：效率工具\n- 主仓：repo-1\n- 组内仓：repo-1\n- 技术栈：Python\n',
+  }
+
+  globalThis.fetch = async (url, init = {}) => {
+    const body = init?.body ? JSON.parse(init.body) : null
+    const query = String(body?.query ?? '')
+    if (String(url).includes('/search/issues')) {
+      const data = { items: [groupIssue] }
+      return { ok: true, status: 200, json: async () => data }
+    }
+    if (String(url).includes('/sub_issues') || String(url).includes('/comments')) {
+      return { ok: true, status: 200, json: async () => [] }
+    }
+    if (String(url).includes('/graphql')) {
+      if (query.includes('updateProjectV2ItemFieldValue')) {
+        writes.push(body.variables)
+        const data = { data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: 'I1' } } } }
+        return { ok: true, status: 200, json: async () => data }
+      }
+      if (query.includes('items(first: 100')) {
+        return { ok: true, status: 200, json: async () => boardResponse }
+      }
+      const data = { data: { repositoryOwner: { projectV2: { id: 'P1' } } } }
+      return { ok: true, status: 200, json: async () => data }
+    }
+    return originalFetch(url, init)
+  }
+
+  try {
+    await writeFile(join(root, 'github-token'), 't', 'utf8')
+    apply(ctx, { root, githubOwner: 'o', githubProjectNumber: 1 })
+    const write = routeFor(routes, `${PREFIX}/state`, 'POST')
+    const response = await write.fetch(new Request(`http://127.0.0.1${PREFIX}/state`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        revision: 99,   // 故意用过期版本号
+        state: { version: 1, projects: [{
+          id: 'group:dsh', name: '组', module: '效率工具', status: '休眠', progress: 80, todos: [],
+        }] },
+      }),
+    }))
+    assert.equal(response.status, 409)
+    assert.match((await response.json()).error, /其他窗口/)
+    assert.deepEqual(writes, [], '版本过期时不能有任何字段写入 GitHub')
+  } finally {
+    globalThis.fetch = originalFetch
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 const AI_PROJECT = { id: 'p1', name: '订单结算服务重构', module: '客户交付', status: '进行中', dueDate: '2026-10-06', startedOn: '2026-09-08', progress: 55, todos: [], updates: [] }

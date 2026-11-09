@@ -222,6 +222,10 @@ export function apply(ctx, config) {
           const body = await readJsonBody(request)
           const github = await readGitHub(ctx, config)
           if (github && github.projects) {
+            // 版本号**先**查：过期了就当场拒。
+            // 顺序反了的话，409 是在 GitHub 改完之后才抛的 ——
+            // 客户端以为保存失败，GitHub 上其实已经改了。
+            await store.checkRevision(body?.revision)
             // 写回 GitHub：只做确定性动作（白名单字段 / 勾选待跟进 / 显式新建）。
             // previous 用的是**刚从 GitHub 读到的远端状态** —— 读失败时上面已经抛错，
             // 所以不会把客户端整份列表误当成"新建"推上去。

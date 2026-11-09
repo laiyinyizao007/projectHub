@@ -201,6 +201,22 @@ export function createProjectStore(root) {
         return { revision: next.revision, projectCount: next.state.projects.length }
       })
     },
+    /**
+     * 只校验版本号，不写。
+     *
+     * 写 GitHub 之前必须先过这关 —— 不然「数据已在其他窗口更新」的 409
+     * 是写完之后才抛的：客户端收到的是「保存失败」，可 GitHub 上已经被改了。
+     */
+    checkRevision(revision) {
+      return serialize(async () => {
+        const current = await load()
+        const value = Number.isSafeInteger(revision) ? revision : -1
+        if (value !== current.revision) {
+          throw new StateError('项目数据已在其他窗口更新，请重新加载后再保存。', 409)
+        }
+        return current.revision
+      })
+    },
     /** 只读摘要，便于外部核验（例如 curl 探活）。 */
     async meta() {
       const current = await load()
