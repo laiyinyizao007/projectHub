@@ -11,7 +11,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createProjectStore, MAX_STATE_BYTES, StateError } from './store.js'
-import { fetchGitHubPortfolio, mergeHumanUpdates } from './github.js'
+import { fetchGitHubPortfolio, mergeHumanUpdates, applyPortfolioChanges } from './github.js'
 import { normalizePlan, planFromRules, planSchemaDoc, projectSnapshot } from '../src/shared/aiplan.js'
 import { todayISO } from '../src/shared/analysis.js'
 import { answerQuestion } from '../src/shared/query.js'
@@ -136,14 +136,16 @@ export function apply(ctx, config) {
    * 读 GitHub 上的项目层级。令牌放在 <root>/github-token（600 权限）。
    * 没有令牌或读取失败 → 返回 null，调用方退回本地数据，不影响原有行为。
    */
-  async function readGitHub(ctx, config) {
-    const tokenPath = join(config.root, 'github-token')
-    let token = ''
+  async function readToken(config) {
     try {
-      token = (await readFile(tokenPath, 'utf8')).trim()
+      return (await readFile(join(config.root, 'github-token'), 'utf8')).trim()
     } catch {
-      return null
+      return ''
     }
+  }
+
+  async function readGitHub(ctx, config) {
+    const token = await readToken(config)
     if (!token) return null
     try {
       return await fetchGitHubPortfolio({
@@ -185,8 +187,31 @@ export function apply(ctx, config) {
     async fetch(request) {
       try {
         if (request?.method === 'POST') {
+          const body = await readJsonBody(request)
+          const github = await readGitHub(ctx, config)
+          if (github && github.projects) {
+            // 写回 GitHub：只做确定性动作（白名单字段 / 勾选待跟进 / 显式新建）。
+            // previous 用的是**刚从 GitHub 读到的远端状态** —— 读失败时上面已经抛错，
+            // 所以不会把客户端整份列表误当成"新建"推上去。
+            const summary = await applyPortfolioChanges({
+              token: await readToken(config),
+              owner: config.githubOwner,
+              projectNumber: config.githubProjectNumber ?? 1,
+              previous: github.projects,
+              next: body?.state?.projects ?? [],
+            })
+            // 进展记录留本地：只存 id / name / updates，别把 GitHub 的数据再复制一份
+            const local = {
+              version: 1,
+              projects: (body?.state?.projects ?? []).map((p) => ({
+                id: p.id, name: p.name, updates: p.updates ?? [],
+              })),
+            }
+            await store.write({ revision: body?.revision, state: local })
+            return json({ ok: true, summary, source: 'github' })
+          }
           // 写：只落**人工进展**（结构字段由 GitHub 同步，不在这里改）
-          return json(await store.write(await readJsonBody(request)))
+          return json(await store.write(body))
         }
         const github = await readGitHub(ctx, config)
         if (github) {

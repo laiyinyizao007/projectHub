@@ -98,3 +98,30 @@ test('人工进展按项目 id 合并回 GitHub 来的记录', async () => {
 test('没有令牌时 provider 直接报错（由调用方决定退回本地）', async () => {
   await assert.rejects(() => fetchGitHubPortfolio({ owner: 'o' }), /没有配置 GitHub 令牌/)
 })
+
+test('跨仓子任务的 id 用它自己所在的仓 —— 防止同号 issue 撞车误关', async () => {
+  // 回归：组的主仓是 dsh-desktop，子任务来自 dsh-desktop 与 dsh-desktop-responsive，
+  // 两者都有 #1。若 id 一律用主仓前缀，两个 #1 会撞成同一个 id，
+  // diff 时会把一个已关闭的 issue 误判成"被勾选"而关掉另一个。
+  const group = {
+    id: 1, node_id: 'I_GROUP', number: 11, title: '🖥️ DSH 组',
+    repository_url: 'https://api.github.com/repos/laiyinyizao007/dsh-desktop',
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z',
+    labels: [{ name: 'type: group' }, { name: 'group:dsh' }],
+    body: 'DSH\n\n- 分类：效率工具\n- 主仓：dsh-desktop\n- 组内仓：dsh-desktop, dsh-desktop-responsive\n- 技术栈：JavaScript\n',
+  }
+  const kids = [
+    { number: 1, title: '本仓的 #1（已关闭）', state: 'closed', closed_at: '2026-10-01T00:00:00Z',
+      repository_url: 'https://api.github.com/repos/laiyinyizao007/dsh-desktop', assignee: null, milestone: null },
+    { number: 1, title: '插件仓的 #1（未关闭）', state: 'open',
+      repository_url: 'https://api.github.com/repos/laiyinyizao007/dsh-desktop-responsive', assignee: null, milestone: null },
+  ]
+  const { projects } = await fetchGitHubPortfolio({
+    fetchImpl: fakeFetch([group], [ITEM], { 11: kids }),
+    token: 't', owner: 'laiyinyizao007', projectNumber: 1,
+  })
+  const ids = projects[0].todos.map((t) => t.id).sort()
+  assert.deepEqual(ids, ['task:dsh-desktop#1', 'task:dsh-desktop-responsive#1'])
+  const closed = projects[0].todos.filter((t) => t.done).length
+  assert.equal(closed, 1, '只有真正关闭的那个是 done')
+})
