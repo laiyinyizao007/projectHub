@@ -9,10 +9,10 @@
  * 不改写会话归属，也不动工作区。
  */
 import React from 'react'
-import { ApiError, askAi, newId, readState, writeState } from './api.js'
+import { ApiError, askAi, newId, readLedger, readState, writeState } from './api.js'
 import { CSS, STYLE_ID } from './styles.js'
 import { Badge, Btn, Empty, Field, Icon, IconBtn, Modal, Notice, Progress, RiskBadge, SearchBox, Sheet, Toast, useToast } from './ui.js'
-import { BoardScreen, CalendarScreen, FollowUpsScreen, KanbanScreen, ListScreen, OverviewScreen, TimelineScreen } from './screens.js'
+import { BoardScreen, CalendarScreen, FollowUpsScreen, KanbanScreen, LedgerScreen, ListScreen, OverviewScreen, TimelineScreen } from './screens.js'
 import { MODULES, STATUSES, clampProgress, daysLeft, formatRemaining, moduleNames, openTodos, projectRisk, sortByRisk, todayISO } from '../shared/analysis.js'
 import { QUESTION_EXAMPLES, answerQuestion } from '../shared/query.js'
 import { buildAnalysisPrompt, buildDocDraft, docKinds, deliveryHint } from '../shared/prompt.js'
@@ -42,7 +42,8 @@ const TABS = [
   { id: 'list', label: '列表', icon: 'list' },
   { id: 'calendar', label: '日历', icon: 'calendar' },
   { id: 'timeline', label: '时间线', icon: 'clock' },
-  { id: 'todos', label: '待跟进', icon: 'check' }
+  { id: 'todos', label: '待跟进', icon: 'check' },
+  { id: 'ledger', label: '台账', icon: 'list' }
 ]
 
 function ensureStyles() {
@@ -129,6 +130,25 @@ function usePortfolio() {
   }, [])
 
   return { status, error, conflict, saving, revision, state, reload: load, update, setError }
+}
+
+/* ------------------------------------------------------------------ 台账 */
+
+/** 台账是只读快照（来自服务端 ledgerPath 指向的文件）。读不到就空着，不影响别的视图。 */
+function useLedger() {
+  const [ledger, setLedger] = useState(null)
+  const [error, setLedgerError] = useState('')
+  const load = useCallback(async () => {
+    try {
+      setLedger(await readLedger())
+      setLedgerError('')
+    } catch (cause) {
+      setLedger(null)
+      setLedgerError(cause instanceof Error ? cause.message : '台账读取失败。')
+    }
+  }, [])
+  useEffect(() => { load() }, [load])
+  return { ledger, error, reload: load }
 }
 
 /* ------------------------------------------------------------- 复制与下载 */
@@ -570,6 +590,7 @@ export function ProjectForm({ draft, existing, moduleOptions, onSubmit, onCancel
 
 export function ConsoleView({ portfolio }) {
   const { status, error, conflict, saving, revision, state, reload, update, setError } = portfolio
+  const { ledger } = useLedger()
   const projects = Array.isArray(state?.projects) ? state.projects : []
   const today = todayISO()
   const toast = useToast()
@@ -778,6 +799,7 @@ export function ConsoleView({ portfolio }) {
         hint: '试试换个模块、清掉智能视图，或者改一下搜索词。'
       })
     }
+    if (tab === 'ledger') return h(LedgerScreen, { ledger, accents })
     if (tab === 'board') return h(BoardScreen, { groups, today, accents, onOpen: setSelectedId })
     if (tab === 'kanban') return h(KanbanScreen, { columns, accents, onOpen: setSelectedId })
     if (tab === 'list') return h(ListScreen, { rows, today, accents, onOpen: setSelectedId })

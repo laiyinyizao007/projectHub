@@ -12,3 +12,7 @@
         root: !!js dshHomePath('project-console')
         githubOwner: laiyinyizao007
         githubProjectNumber: 1
+        # 台账（只读）：全部 GitHub 仓 + 归属分类 + 标签 + 状态。
+        # 看板只放得下能建 Issue 的仓；归档仓和关了 Issues 的仓建不了条目，
+        # 它们在「台账」页签里。文件由 my-project-management/export_repo_ledger.py 生成。
+        ledgerPath: /home/averypi/Projects/my-project-management/repo-ledger.json

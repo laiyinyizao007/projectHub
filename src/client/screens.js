@@ -1,9 +1,10 @@
 /** 各个维度的看板视图组件。 */
 import React from 'react'
 import { Donut, Histogram, Legend, RankBars, StackedBars } from './charts.js'
-import { Badge, Btn, Empty, Icon, IconBtn, Progress, RiskBadge, Stat } from './ui.js'
+import { Badge, Btn, Empty, Icon, IconBtn, Progress, RiskBadge, SearchBox, Stat } from './ui.js'
 import { clampProgress, formatRemaining, latestUpdate, openTodos, projectRisk } from '../shared/analysis.js'
 const h = React.createElement
+const { useMemo, useState } = React
 const PROGRESS_TONE = { overdue: 'danger', blocked: 'danger', urgent: 'danger', slipping: 'warn', soon: 'warn', done: 'ok' }
 const accentOf = (accents, module) => accents?.[module] ?? 'indigo'
 
@@ -98,6 +99,96 @@ export function ListScreen({ rows, today, accents, onOpen }) {
       h('td', { className: 'pc-num' }, formatRemaining(project.dueDate, today)),
       h('td', null, h(RiskBadge, { risk })),
       h('td', { className: 'pc-num' }, openTodos(project).length > 0 ? String(openTodos(project).length) : '—'))))))
+}
+
+/* ---------------------------------------------------------------- 台账 */
+
+/**
+ * 全部 GitHub 仓的台账（只读）。
+ *
+ * 看板只放得下「能建 Issue 的仓」——归档仓、关了 Issues 的仓建不了条目，
+ * 但它们同样是「你的项目」，也得有归属、也得看得见，所以单独一张表列全。
+ */
+export function LedgerScreen({ ledger, accents }) {
+  const [keyword, setKeyword] = useState('')
+  const [category, setCategory] = useState('全部')
+  const [onlyUnlisted, setOnlyUnlisted] = useState(false)
+
+  const repos = ledger?.repos ?? []
+  const categories = useMemo(
+    () => ['全部', ...Array.from(new Set(repos.map((r) => r.category).filter(Boolean)))],
+    [repos]
+  )
+
+  const rows = useMemo(() => {
+    const q = keyword.trim().toLowerCase()
+    return repos.filter((repo) => {
+      if (category !== '全部' && repo.category !== category) return false
+      if (onlyUnlisted && repo.inBoard) return false
+      if (!q) return true
+      return [repo.name, repo.category, repo.basis, repo.language, repo.notes, ...(repo.tags ?? [])]
+        .filter(Boolean).join(' ').toLowerCase().includes(q)
+    })
+  }, [repos, keyword, category, onlyUnlisted])
+
+  if (!ledger || ledger.source === 'not-configured') {
+    return h(Empty, {
+      icon: 'inbox',
+      title: '还没有台账数据',
+      hint: '台账由 my-project-management/export_repo_ledger.py 生成，配置 ledgerPath 后就有了。'
+    })
+  }
+  if (ledger.source === 'ledger-error') {
+    return h(Empty, { icon: 'alert', title: '台账读不出来', hint: ledger.message || '检查 ledgerPath 指向的文件。' })
+  }
+
+  const counts = ledger.counts ?? {}
+  return h('div', { className: 'pc-ledger' },
+    h('div', { className: 'pc-ledger-bar' },
+      h(SearchBox, {
+        value: keyword, onChange: setKeyword,
+        placeholder: '搜索仓库、标签、说明…', label: '搜索台账'
+      }),
+      h('div', { className: 'pc-ledger-chips' },
+        categories.map((name) => h('button', {
+          key: name, type: 'button',
+          className: `pc-chip${category === name ? ' pc-chip-on' : ''}`,
+          'aria-pressed': category === name,
+          onClick: () => setCategory(name)
+        }, name, h('span', { className: 'pc-chip-n' },
+          name === '全部' ? String(repos.length) : String(repos.filter((r) => r.category === name).length)))),
+        h('button', {
+          type: 'button',
+          className: `pc-chip${onlyUnlisted ? ' pc-chip-on' : ''}`,
+          'aria-pressed': onlyUnlisted,
+          onClick: () => setOnlyUnlisted((v) => !v)
+        }, '未进看板'))),
+
+    h('div', { className: 'pc-ledger-stats' },
+      h(Stat, { label: 'GitHub 仓', value: String(counts.total ?? repos.length), icon: 'inbox' }),
+      h(Stat, { label: '看板内', value: String(counts.inBoard ?? 0), icon: 'grid' }),
+      h(Stat, { label: '已归档', value: String(counts.archived ?? 0), icon: 'clock' }),
+      h(Stat, { label: 'Issues 关闭', value: String(counts.issuesDisabled ?? 0), icon: 'alert' })),
+
+    h('div', { className: 'pc-table-wrap' },
+      h('table', { className: 'pc-table' },
+        h('thead', null, h('tr', null,
+          ['仓库', '分类', '状态', '归属依据', '语言', '最后提交', '说明'].map((label) => h('th', { key: label }, label)))),
+        h('tbody', null, rows.map((repo) => h('tr', { key: repo.name },
+          h('td', { className: 'pc-name', title: repo.url },
+            h('i', { className: `pc-accent-dot pc-accent-${accentOf(accents, repo.category)}` }),
+            repo.name,
+            repo.inBoard ? null : h('span', { className: 'pc-tag pc-tag-dim' }, '未进看板')),
+          h('td', null, h('span', { className: 'pc-tag' }, repo.category || '—')),
+          h('td', null, repo.archived
+            ? h(Badge, { tone: 'muted' }, '已归档')
+            : repo.issuesDisabled
+              ? h(Badge, { tone: 'warn' }, 'Issues 关闭')
+              : h(Badge, { tone: 'ok' }, '在动')),
+          h('td', null, repo.basis || '—'),
+          h('td', null, repo.language || '—'),
+          h('td', { className: 'pc-num' }, repo.lastCommit || repo.pushedAt || '—'),
+          h('td', { className: 'pc-ledger-note', title: repo.notes || '' }, repo.notes || '—')))))))
 }
 
 /* ------------------------------------------------------------------ 看板 */

@@ -34,6 +34,20 @@ export async function readState() {
   return { revision: Number(payload.revision) || 0, state: payload.state || { version: 1, projects: [] } }
 }
 
+/** 读「台账」：全部 GitHub 仓 + 归属分类（只读快照，来自 ledgerPath 指向的文件）。 */
+export async function readLedger() {
+  const response = await fetch(`${PREFIX}/ledger`, { credentials: 'same-origin', cache: 'no-store' })
+  const payload = await parse(response)
+  if (!payload || typeof payload !== 'object') throw new ApiError('服务端返回了无法识别的台账。', 500)
+  return {
+    source: payload.source || 'unknown',
+    generatedAt: payload.generatedAt || '',
+    message: payload.message || '',
+    counts: payload.counts || {},
+    repos: Array.isArray(payload.repos) ? payload.repos : [],
+  }
+}
+
 /** 让 AI 把自然语言指令解析成变更计划（不落库）。 */
 export async function askAi(instruction, projects, today) {
   const response = await fetch(`${PREFIX}/ai`, {

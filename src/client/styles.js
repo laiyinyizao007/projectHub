@@ -524,6 +524,19 @@ export const CSS = `
   .pc-tl-head,.pc-tl-row{grid-template-columns:120px 1fr}
   .pc-tl-todayline{left:calc(120px + (100% - 120px) * .5)}
 }
+/* ---------------------------------------------------------------- 台账 */
+.pc-ledger{display:flex;flex-direction:column;gap:12px}
+.pc-ledger-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pc-ledger-bar .pc-search{flex:0 0 240px}
+.pc-ledger-chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pc-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--pc-line-2);background:var(--pc-panel);color:var(--pc-text-3);font-size:11px;cursor:pointer}
+.pc-chip:hover{border-color:var(--pc-line);color:var(--pc-text-2)}
+.pc-chip-on{background:var(--pc-sunken);border-color:var(--pc-line);color:var(--pc-text-1);font-weight:600}
+.pc-chip-n{font-variant-numeric:tabular-nums;opacity:.6}
+.pc-ledger-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}
+.pc-ledger-note{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--pc-text-3)}
+.pc-tag-dim{margin-left:6px;opacity:.7}
+
 @container pc-app (max-width:560px){
   .pc-search{display:none}
   .pc-kpis{grid-template-columns:repeat(auto-fit,minmax(104px,1fr))}

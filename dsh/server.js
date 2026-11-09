@@ -24,6 +24,13 @@ export const Config = Schema.object({
   githubOwner: Schema.string(),
   /** 项目组所在的 Project v2 编号。默认 1 = 任务看板。 */
   githubProjectNumber: Schema.number(),
+  /**
+   * 「台账」JSON 的路径：全部 GitHub 仓 + 归属分类 + 标签 + 状态。
+   * 看板只放得下能建 Issue 的仓（归档仓、关了 Issues 的仓建不了条目），
+   * 台账把**所有**仓连同归属一起列出来，只读。
+   * 不配就没有台账这个页签的数据，面板照常工作。
+   */
+  ledgerPath: Schema.string(),
 })
 
 const PREFIX = '/api/project-console'
@@ -158,6 +165,31 @@ export function apply(ctx, config) {
       return { projects: [], meta: { source: 'github-error', message: error instanceof Error ? error.message : String(error) } }
     }
   }
+
+  ctx.connection.fetch.register({
+    path: `${PREFIX}/ledger`,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    async fetch() {
+      // 台账是**只读快照**：由 my-project-management/export_repo_ledger.py 生成。
+      // 读不到就返回空台账 + 说明，不让整个面板挂掉。
+      if (!config.ledgerPath) {
+        return json({ source: 'not-configured', repos: [], counts: {} })
+      }
+      try {
+        const text = await readFile(config.ledgerPath, 'utf8')
+        const payload = JSON.parse(text)
+        return json({ ...payload, source: 'ledger-file' })
+      } catch (error) {
+        return json({
+          source: 'ledger-error',
+          repos: [],
+          counts: {},
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  })
 
   ctx.connection.fetch.register({
     path: `${PREFIX}/meta`,

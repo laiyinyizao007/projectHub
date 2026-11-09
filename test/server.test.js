@@ -35,7 +35,7 @@ test('服务端入口的必须是规范要求的样子', () => {
 
 test('路由都挂在自己的前缀下，且每个路径只注册一次', async () => {
   await withServer(async ({ routes }) => {
-    assert.equal(routes.length, 3)
+    assert.equal(routes.length, 4)
     for (const route of routes) {
       assert.ok(route.path.startsWith(`${PREFIX}/`), `${route.path} 不在本工作台前缀下`)
       assert.equal(route.requestBody, 'buffered')
@@ -45,6 +45,16 @@ test('路由都挂在自己的前缀下，且每个路径只注册一次', async
     // connection 的 exact Fetch 路由按路径唯一，重复注册会直接抛错（真实宿主里踩过）。
     assert.equal(new Set(routes.map((route) => route.path)).size, routes.length)
     assert.deepEqual(routeFor(routes, `${PREFIX}/state`, 'GET').methods, ['GET', 'POST'])
+  })
+})
+
+test('GET /ledger 返回台账；没配 ledgerPath 时返回空台账而不是报错', async () => {
+  await withServer(async ({ routes, root }) => {
+    const response = await routeFor(routes, `${PREFIX}/ledger`, 'GET').fetch(new Request(`http://127.0.0.1${PREFIX}/ledger`))
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+    assert.equal(payload.source, 'not-configured')
+    assert.deepEqual(payload.repos, [])
   })
 })
 
